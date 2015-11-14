@@ -1,0 +1,102 @@
+---
+title: "Test"
+output: html_document
+---
+
+Import libraries
+```{r}
+library(gdata)
+```
+
+Set parameters and read data
+```{r}
+filename<-"../data/Pt#4 CMU.xlsx"
+skip_line<-3
+```
+
+Read data and get get sequence of weight
+```{r}
+data <- read.xls(filename, skip=skip_line)
+end_line<- grep("High", as.character((data$Session.Date)))
+column_boarder<-grep("Reading.Date.and.Time",names(data))
+session_data <- data[-end_line:-(end_line+2),1:column_boarder-1]
+other_data <-data[-end_line:-(end_line+2),column_boarder:ncol(data)]
+```
+
+Excluded invalid lines
+```{r}
+session_data[session_data==""]<- NA
+session_data[session_data==0]<- NA
+session_data<-na.omit(session_data)
+other_data[other_data==""]<- NA
+other_data[other_data==0]<- NA
+other_data<-na.omit(other_data)
+```
+
+Draw graphs
+```{r}
+session_dates<- as.POSIXlt(session_data$Session.Date)
+SysBP = session_data$Systolic.BP
+DiasBP = session_data$Diastolic.BP
+plot(session_dates, SysBP, type="l", ylab="", ylim=c(0, 250))
+par(new=T)
+plot(session_dates, DiasBP, type="l", ylab="BP", ylim=c(0, 250))
+
+BP_HR = session_data$BP.HR
+plot(session_dates, BP_HR, type="l", ylab="BP_HR", ylim=c(0, 250))
+
+reading_dates<- as.POSIXlt(other_data$Reading.Date.and.Time)
+weight<- other_data$Weight
+plot(reading_dates, weight, type="l")
+```
+
+ARIMA Model
+```{r}
+weight_seq <- rev(weight)
+input_step = 200
+prediction_step = 14
+max_degree <- 3
+
+input_idx = 1:input_step
+prediction_idx = (input_step+1):(input_step+prediction_step)
+input_data = weight_seq[input_idx]
+ground_truth = weight_seq[prediction_idx]
+
+means = c()
+norms = c()
+params = list()
+for(i in 0:max_degree){
+  for(j in 0:max_degree){
+    for(k in 0:max_degree){
+      order_param = c(i,j,k)
+      fit1 <- arima(input_data, order_param, optim.method = "BFGS")
+      preds <- predict(fit1,prediction_step)
+      mean_residuals = mean(ground_truth-preds$pred)
+      norm_residuals = norm(matrix(ground_truth-preds$pred))/prediction_step
+      means <- c(means, mean_residuals)
+      norms <- c(norms, norm_residuals)
+      params <- c(params, list(order_param))
+    }
+  }
+}
+
+min_norm_order = params[[which.min(means)]]
+fit1 <- arima(input_data, min_norm_order, optim.method = "BFGS")
+preds <- predict(fit1,prediction_step)
+
+graph_xlim = c(input_step-prediction_step, input_step+prediction_step)
+graph_ylim = c(min(weight),max(weight))
+
+plot(input_idx, input_data, type="l",
+     xlim=graph_xlim, ylim=graph_ylim)
+par(new=T)
+plot(prediction_idx, preds$pred, type="l", col=2,
+     xlim=graph_xlim, ylim=graph_ylim)
+par(new=T)
+plot(prediction_idx, ground_truth, type="l", col=3,
+     xlim=graph_xlim, ylim=graph_ylim)
+```
+
+
+
+
