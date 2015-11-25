@@ -14,7 +14,7 @@ filename<-"../data/Pt#4 CMU.xlsx"
 skip_line<-3
 ```
 
-Read data and get get sequence of weight
+Read data
 ```{r}
 data <- read.xls(filename, skip=skip_line)
 end_line<- grep("High", as.character((data$Session.Date)))
@@ -23,7 +23,7 @@ session_data <- data[-end_line:-(end_line+2),1:column_boarder-1]
 other_data <-data[-end_line:-(end_line+2),column_boarder:ncol(data)]
 ```
 
-Excluded invalid lines
+Exclude invalid lines
 ```{r}
 session_data[session_data==""]<- NA
 session_data[session_data==0]<- NA
@@ -33,70 +33,166 @@ other_data[other_data==0]<- NA
 other_data<-na.omit(other_data)
 ```
 
-Draw graphs
+Function for Moving Average
 ```{r}
-session_dates<- as.POSIXlt(session_data$Session.Date)
-SysBP = session_data$Systolic.BP
-DiasBP = session_data$Diastolic.BP
-plot(session_dates, SysBP, type="l", ylab="", ylim=c(0, 250))
-par(new=T)
-plot(session_dates, DiasBP, type="l", ylab="BP", ylim=c(0, 250))
-
-BP_HR = session_data$BP.HR
-plot(session_dates, BP_HR, type="l", ylab="BP_HR", ylim=c(0, 250))
-
-reading_dates<- as.POSIXlt(other_data$Reading.Date.and.Time)
-weight<- other_data$Weight
-plot(reading_dates, weight, type="l")
-```
-
-ARIMA Model
-```{r}
-weight_seq <- rev(weight)
-input_step = 200
-prediction_step = 14
-max_degree <- 3
-
-input_idx = 1:input_step
-prediction_idx = (input_step+1):(input_step+prediction_step)
-input_data = weight_seq[input_idx]
-ground_truth = weight_seq[prediction_idx]
-
-means = c()
-norms = c()
-params = list()
-for(i in 0:max_degree){
-  for(j in 0:max_degree){
-    for(k in 0:max_degree){
-      order_param = c(i,j,k)
-      fit1 <- arima(input_data, order_param, optim.method = "BFGS")
-      preds <- predict(fit1,prediction_step)
-      mean_residuals = mean(ground_truth-preds$pred)
-      norm_residuals = norm(matrix(ground_truth-preds$pred))/prediction_step
-      means <- c(means, mean_residuals)
-      norms <- c(norms, norm_residuals)
-      params <- c(params, list(order_param))
-    }
-  }
+moving_average <- function(x, n){
+  filter(x, rep(1, n)) / n
 }
 
-min_norm_order = params[[which.min(means)]]
-fit1 <- arima(input_data, min_norm_order, optim.method = "BFGS")
-preds <- predict(fit1,prediction_step)
-
-graph_xlim = c(input_step-prediction_step, input_step+prediction_step)
-graph_ylim = c(min(weight),max(weight))
-
-plot(input_idx, input_data, type="l",
-     xlim=graph_xlim, ylim=graph_ylim)
-par(new=T)
-plot(prediction_idx, preds$pred, type="l", col=2,
-     xlim=graph_xlim, ylim=graph_ylim)
-par(new=T)
-plot(prediction_idx, ground_truth, type="l", col=3,
-     xlim=graph_xlim, ylim=graph_ylim)
+plot_ts_and_mv <- function(ts, dates, length, y_label){
+  ma_ts = moving_average(ts, length)
+  ylim = c(min(ts), max(ts))
+  plot(dates, ts, type = "l", ylim=ylim, ylab=y_label)
+  par(new=T)
+  plot(dates, ma_ts, type="l", ylim=ylim, col=2, ylab="")
+}
 ```
 
+Plot time series and its moving average
+```{r}
+ma_length<-30
+session_dates<- rev(as.POSIXlt(session_data$Session.Date))
+SysBP = rev(session_data$Systolic.BP)
+SysBP_label = "SysBP"
+plot_ts_and_mv(SysBP, session_dates, ma_length, SysBP_label)
 
+DiasBP = rev(session_data$Diastolic.BP)
+DiasBP_label = "DiasBP"
+plot_ts_and_mv(DiasBP, session_dates, ma_length, DiasBP_label)
 
+BP_HR = rev(session_data$BP.HR)
+HR_label = "BP_HR"
+plot_ts_and_mv(BP_HR, session_dates, ma_length, HR_label)
+
+reading_dates<- rev(as.POSIXlt(other_data$Reading.Date.and.Time))
+weight<- rev(other_data$Weight)
+weight_label = "weight"
+plot_ts_and_mv(weight, reading_dates, ma_length, weight_label)
+```
+
+# Prediction of timeseries of with ARIMA Model
+```{r}
+## Function for optimize parameters of ARIMA
+param_optim <- function(modeling_ts, validation_ts, max_degree, arima_optim, visualize){
+
+  if(visualize){
+    xlim = c(1, length(modeling_ts)+length(validation_ts))
+    ylim = c(min(modeling_ts), max(modeling_ts))
+  
+    modeling_points = 1:length(modeling_ts)
+    validation_points = 1:length(validation_ts) + length(modeling_ts)
+
+    plot(modeling_points, modeling_ts, type="l",
+         xlim=xlim, xlab="", ylim=ylim, ylab="")
+    par(new=T)
+    plot(validation_points, validation_ts, type="l", col=3,
+         xlim=xlim, xlab="", ylim=ylim, ylab="")
+  }
+  
+  means <- c()
+  norms <- c()
+  params <- list()
+  for(i in 0:max_degree){
+    for(j in 0:1){
+      for(k in 0:max_degree){
+        tryCatch({
+          order_param = c(i,j,k)
+          fit1 <- arima(modeling_ts, order_param, optim.method = arima_optim)
+          validation <- predict(fit1,validation_step)
+          mean_residuals = abs(mean(validation_ts-validation$pred))
+          norm_residuals = norm(matrix(validation_ts-validation$pred))/validation_step
+          means <- c(means, mean_residuals)
+          norms <- c(norms, norm_residuals)
+          params <- c(params, list(order_param))
+          
+          if(visualize){
+            #print(order_param)
+            par(new=T)
+            plot(validation_points, validation$pred, type="l", col=2,
+                 xlim=xlim, xlab="", ylim=ylim, ylab="")
+          }
+
+          },
+          error = function(e) {
+            print(order_param)
+            message(e)
+          })
+      }
+    }
+  }
+  
+  ## Predict with the best parameter
+  min_norm_order = params[[which.min(means)]]
+}
+
+ts_prediction <- function(ts, dates, modeling_step, validation_step, prediction_step,
+                          max_degree, ylabel, arima_optim){
+  
+  ## Parameter Estimation
+  modeling_idx = 1:modeling_step
+  modeling_ts = ts[modeling_idx]
+  modeling_dates = dates[modeling_idx]
+
+  validation_idx = 1:validation_step + modeling_step
+  validation_ts = ts[validation_idx]
+  validation_dates = dates[validation_idx]
+  
+  min_norm_order <- param_optim(modeling_ts, validation_ts, max_degree, arima_optim, F)
+  
+  print("Order")
+  print(min_norm_order)
+  
+  ## Prediction
+  input_idx = 1:(modeling_step + validation_step)
+  input_ts = ts[input_idx]
+  input_dates = dates[input_idx]
+
+  prediction_idx = 1:prediction_step + modeling_step + validation_step
+  prediction_ts = ts[prediction_idx]
+  prediction_dates = dates[prediction_idx]
+
+  predict_xlim = as.POSIXct(c(rev(modeling_dates)[prediction_step*3], rev(prediction_dates)[1]))
+  ylim = c(min(ts), max(ts))
+  
+  tryCatch({
+    fit1 <- arima(input_ts, min_norm_order, optim.method = arima_optim)
+    preds <- predict(fit1,prediction_step)
+    
+    par(new=F)
+    plot(input_dates, input_ts, type="l",
+         xlim=predict_xlim, xlab="",
+         ylim=ylim)
+    par(new=T)
+    plot(prediction_dates, preds$pred, type="l", col=2,
+         xlim=predict_xlim, xlab="",
+         ylim=ylim, ylab="")
+    par(new=T)
+    plot(prediction_dates, prediction_ts, type="l", col=3,
+         xlim=predict_xlim, xlab="",
+         ylim=ylim, ylab="")
+    
+    rev(preds$pred)[1] - rev(prediction_ts)[1] 
+  },
+  error = function(e) {
+              message(e)
+            })
+}
+
+#Parameter
+validation_step = 20 # number of points to be used for validation
+prediction_step = 20 # number of points predicted
+max_degree <- 3 # maximum degree used in ARIMA model
+arima_optim <- "BFGS"
+
+residual_list <- c()
+for(modeling_step in (100 + 0:60 * 5)){
+  print(modeling_step)
+  rs = ts_prediction(weight, reading_dates, modeling_step, validation_step, prediction_step,
+                     max_degree, "weight", arima_optim)
+  print(rs)
+  residual_list <- c(residual_list, rs)
+}
+
+print(mean(abs(residual_list)))
+```
 
