@@ -6,6 +6,7 @@ output: html_document
 Import libraries
 ```{r}
 library(gdata)
+library(animation)
 ```
 
 Set parameters and read data
@@ -158,7 +159,7 @@ ts_prediction <- function(ts, dates, modeling_step, validation_step, prediction_
     fit1 <- arima(input_ts, min_norm_order, optim.method = arima_optim)
     preds <- predict(fit1,prediction_step)
     
-    par(new=F)
+    #par(new=F)
     plot(input_dates, input_ts, type="l",
          xlim=predict_xlim, xlab="",
          ylim=ylim)
@@ -185,13 +186,15 @@ max_degree <- 3 # maximum degree used in ARIMA model
 arima_optim <- "BFGS"
 
 residual_list <- c()
-for(modeling_step in (100 + 0:60 * 5)){
-  print(modeling_step)
-  rs = ts_prediction(weight, reading_dates, modeling_step, validation_step, prediction_step,
+saveGIF({
+  for(modeling_step in (100 + 0:60 * 5)){
+    print(modeling_step)
+    rs = ts_prediction(weight, reading_dates, modeling_step, validation_step, prediction_step,
                      max_degree, "weight", arima_optim)
-  print(rs)
-  residual_list <- c(residual_list, rs)
-}
+    print(rs)
+    residual_list <- c(residual_list, rs)
+  }
+}, interval=0.4)
 
 print(mean(abs(residual_list)))
 ```

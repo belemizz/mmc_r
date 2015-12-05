@@ -1,5 +1,8 @@
-*.html
 .RData
 .Rhistory
+*.gif
+*.png
+*.html
 *~
-
+js*
+css*
