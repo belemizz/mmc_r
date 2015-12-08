@@ -31,5 +31,5 @@ read_mmc_data = function(filename, names=c(), exclude_invalid=T){
     valid_data = exclude_invalid_lines(all_data)
   }
   
-  return(valid_data)
+  return(rev_rows(valid_data))
 }

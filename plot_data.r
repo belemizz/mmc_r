@@ -31,12 +31,19 @@ plot_list_ts <- function(list_ts, dates, y_labels){
 plot_prediction=function(input_dates, input_ts, prediction_dates, gt_ts,
                          prediction_mean, prediction_lower, prediction_upper,
                          xlim, ylim, ylabel){
-  
+
+  if(mean(gt_ts) > mean(prediction_upper)){
+    par(bg="pink")
+  }else if(mean(gt_ts) < mean(prediction_lower)){
+    par(bg="yellow")
+  }else{
+    par(bg="white")
+  }
   plot(input_dates, input_ts, type="l",
        xlim=xlim, ylim=ylim, xlab="", ylab=ylabel)
   par(new=T)
   plot(prediction_dates, gt_ts, type="l", col=2,
-       xlim=xlim, ylim=ylim, xlab="", ylab="")
+       xlim=xlim, ylim=ylim, xlab="", ylab="", axes=T)
   par(new=T)
   plot(prediction_dates, prediction_mean, type="l", col=3,
        xlim=xlim, ylim=ylim, xlab="", ylab="")
@@ -46,6 +53,9 @@ plot_prediction=function(input_dates, input_ts, prediction_dates, gt_ts,
   par(new=T)
   plot(prediction_dates, prediction_upper, type="l", col=4,
        xlim=xlim, ylim=ylim, xlab="", ylab="")
+  
+  average_residual = mean(abs(prediction_mean - gt_ts))
+  mtext(sprintf("%s:   %0.3f", rev(prediction_dates)[1], average_residual))
 }
 
 

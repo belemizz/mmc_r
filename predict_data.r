@@ -1,7 +1,75 @@
 library(forecast)
 library(vars)
 
-var_prediction <- function(metrics, dates, input_step, predcition_step, target="Weight"){
+diff_var_prediction <- function(metrics, dates, input_step, prediction_step, target = "Weight"){
+  ts = metrics[[target]]
+  
+  input_idx = 1:input_step
+  input_metrics = metrics[input_idx,]
+  input_ts = ts[input_idx]
+  input_dates = dates[input_idx]
+  
+  prediction_idx = 1:prediction_step + input_step
+  prediction_ts = ts[prediction_idx]
+  prediction_dates = dates[prediction_idx]
+  
+  if(ncol(metrics) == 1){
+    input_diff_ts = diff(input_ts)
+    model = ar(input_diff_ts, order.max = 10)
+    preds = predict(model, n.ahead = prediction_step, ci = 0.90, dumvar = NULL)
+    pred_mean = rev(input_ts)[1] + cumsum(preds$pred)
+    pred_upper = pred_mean + preds$se
+    pred_lower = pred_mean - preds$se
+  }else{
+    for(idx in 1:length(input_metrics)){
+      input_metrics[idx] = c(0, diff(input_metrics[[idx]]))
+    }
+    lag = VARselect(input_metrics, lag.max = 10, type="const")$selection[1]
+    model = VAR(input_metrics, p=lag, type="const")
+    predict_metrics = predict(model, n.ahead = prediction_step, ci = 0.90, dumvar = NULL)
+    preds = predict_metrics$fcst[[target]]
+    pred_mean = rev(input_ts)[1] + cumsum(preds[,1])
+    pred_upper = pred_mean + preds[,4]
+    pred_lower = pred_mean - preds[,4]
+  }
+  xlim = as.POSIXct(c(rev(input_dates)[input_step/5], rev(prediction_dates)[1]))
+  ylim = c(min(ts), max(ts))
+  
+#  plot_prediction(input_dates, input_ts, prediction_dates, prediction_ts,
+#                  pred_mean, pred_lower, pred_upper, xlim, ylim, target)
+
+  pred_mean - prediction_ts
+}
+
+t_diff_var_prediction <- function(metrics, dates, input_step, prediction_step, target = "Weight"){
+  ts = metrics[[target]]
+  
+  input_idx = 1:input_step
+  input_metrics = metrics[input_idx,]
+  input_ts = ts[input_idx]
+  input_dates = dates[input_idx]
+  
+  prediction_idx = 1:prediction_step + input_step
+  prediction_ts = ts[prediction_idx]
+  prediction_dates = dates[prediction_idx]
+  
+  if(ncol(metrics) == 1){
+    input_diff_ts = diff(input_ts)
+    model = ar(input_diff_ts, order.max = 10)
+    preds = predict(model, n.ahead = prediction_step, ci = 0.90, dumvar = NULL)
+    pred_mean = rev(input_ts)[1] + cumsum(preds$pred)
+  }else{
+    input_metrics[target] = c(0, diff(input_ts))
+    lag = VARselect(input_metrics, lag.max = 10, type="const")$selection[1]
+    model = VAR(input_metrics, p=lag, type="const")
+    predict_metrics = predict(model, n.ahead = prediction_step, ci = 0.90, dumvar = NULL)
+    preds = predict_metrics$fcst[[target]]
+    pred_mean = rev(input_ts)[1] + cumsum(preds[,1])
+  }
+  pred_mean - prediction_ts
+}
+
+var_prediction <- function(metrics, dates, input_step, prediction_step, target="Weight"){
 
   ts = metrics[[target]]
   
@@ -33,8 +101,8 @@ var_prediction <- function(metrics, dates, input_step, predcition_step, target="
   xlim = as.POSIXct(c(rev(input_dates)[prediction_step*3], rev(prediction_dates)[1]))
   ylim = c(min(ts), max(ts))
   
-  plot_prediction(input_dates, input_ts, prediction_dates, prediction_ts,
-                  pred_mean, pred_lower, pred_upper, xlim, ylim, target)
+#  plot_prediction(input_dates, input_ts, prediction_dates, prediction_ts,
+#                  pred_mean, pred_lower, pred_upper, xlim, ylim, target)
   
   #return final residual
   
@@ -56,9 +124,9 @@ auto_arima_prediction = function(ts, dates,
   ylim = c(min(ts), max(ts))
   
   preds = forecast(model, level=c(90), h=prediction_step)
-  plot_prediction(input_dates, input_ts, prediction_dates, prediction_ts,
-                  preds$mean, preds$lower, preds$upper,
-                  xlim, ylim, target)
+#  plot_prediction(input_dates, input_ts, prediction_dates, prediction_ts,
+#                  preds$mean, preds$lower, preds$upper,
+#                  xlim, ylim, target)
   preds$mean - prediction_ts 
 }
 
