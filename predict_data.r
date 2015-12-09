@@ -112,10 +112,22 @@ auto_arima_prediction = function(ts, dates, input_step, prediction_step,
   preds$mean - prediction_ts 
 }
 
-ts_prediction = function(ts, dates,
-                         modeling_step, validation_step, prediction_step,
-                         max_ar_degree, max_i_degree, max_ma_degree,
-                         optim_method, visualize_optim_degree, target="Weight"){
+# split_and_validate model
+s_and_v_prediction = function(ts, dates, input_step, prediction_step,
+                              target="Weight", plot_prediction=F, ci = 0.90){
+  
+#   (ts, dates,
+#                          modeling_step, validation_step, prediction_step,
+#                          max_ar_degree, max_i_degree, max_ma_degree,
+#                          optim_method, visualize_optim_degree, target="Weight"){
+  validation_step = 5
+  max_ar_degree = 5
+  max_i_degree = 1
+  max_ma_degree = 5
+  optim_method = "BFGS"
+  visualize_optim_degree = F
+  
+  modeling_step = input_step - validation_step
   
   # degree optimization
   modeling_idx = 1:modeling_step
@@ -138,27 +150,18 @@ ts_prediction = function(ts, dates,
   prediction_ts = ts[prediction_idx]
   prediction_dates = dates[prediction_idx]
   
-  predict_xlim = as.POSIXct(c(rev(modeling_dates)[prediction_step*3], rev(prediction_dates)[1]))
-  ylim = c(min(ts), max(ts))
-  
   tryCatch({
-    fit1 = arima(input_ts, optim_degree, optim.method = arima_optim)
-    preds = predict(fit1,n.ahead = prediction_step, ci=0.90)
+    fit1 = arima(input_ts, optim_degree, optim.method = optim_method)
+    preds = predict(fit1,n.ahead = prediction_step, ci=ci)
     
-    par(new=F)
-    plot(input_dates, input_ts, type="l",
-         xlim=predict_xlim, xlab="",
-         ylim=ylim)
-    par(new=T)
-    plot(prediction_dates, preds$pred, type="l", col=2,
-         xlim=predict_xlim, xlab="",
-         ylim=ylim, ylab="")
-    par(new=T)
-    plot(prediction_dates, prediction_ts, type="l", col=3,
-         xlim=predict_xlim, xlab="",
-         ylim=ylim, ylab="")
-    
-    pred_mean - prediction_ts
+    if(plot_prediction){
+      xlim = as.POSIXct(c(rev(input_dates)[prediction_step*3], rev(prediction_dates)[1]))
+      ylim = c(min(ts), max(ts))
+      plot_prediction(input_dates, input_ts, prediction_dates, prediction_ts,
+                      preds$mean, preds$lower, preds$upper,
+                      xlim, ylim, target)
+    }
+    preds$pred - prediction_ts
   },
   error = function(e) {
     message(e)
@@ -185,6 +188,7 @@ optim_degree_arima = function(modeling_ts, validation_ts,
   
   means = c()
   params = list()
+  validation_step = length(validation_ts)
   for(i in 0:max_ar_degree){
     for(j in 0:max_i_degree){
       for(k in 0:max_ma_degree){

@@ -8,7 +8,7 @@ source("predict_data.r")
 # Read data
 used_metrics = c("Weight", "Systolic.BP", "Diastolic.BP", "BP.HR")
 used_names = c("Session.Date", used_metrics)
-mmc_data = read_mmc_data(9, used_names)
+mmc_data = read_mmc_data(4, used_names)
 dates= as.POSIXlt(mmc_data$Session.Date)
 metrics = mmc_data[used_metrics]
 
@@ -32,6 +32,7 @@ fit_model <- function(metrics, model_type="var", target="Weight", animation=F){
   
   for(evaluation_point in evaluation_points){
     input_step = evaluation_point - prediction_step
+    ts = metrics[[target]]
     if(model_type=="var"){
       # VAR(AR) model
       rs = var_prediction(metrics, dates, input_step, prediction_step, target, plot_prediction = animation)
@@ -43,14 +44,9 @@ fit_model <- function(metrics, model_type="var", target="Weight", animation=F){
       rs = diff_var_prediction(metrics, dates, input_step, prediction_step, target, diff_names = names(metrics), plot_prediction = animation)
     }else if(model_type=="auto_arima"){
       # ARIMA Model, Single time series only
-      ts = metrics[[target]]
       rs = auto_arima_prediction(ts, dates, input_step, prediction_step, target, plot_prediction = animation)
-#     }else if(model_type=="min_arima"){
-#       modeling_step = input_step - validation_step
-#       rs = ts_prediction(ts, dates,
-#                          modeling_step, validation_step, prediction_step,
-#                          max_ar_degree, max_i_degree, max_ma_degree,
-#                          arima_optim, visualize_optim_degree = F)
+    }else if(model_type=="s_and_v"){
+      rs = s_and_v_prediction(ts, dates, input_step, prediction_step, target, plot_prediction = animation)
     }else{
       print("model_type must be var, var_target_diff, var_all_diff or auto_arima")
     }
@@ -62,11 +58,19 @@ fit_model <- function(metrics, model_type="var", target="Weight", animation=F){
 # Single time series comparison
 compare_single_series_models <- function(timeseries, target){
   r_w_var = fit_model(timeseries, "var", target)
-  r_w_arima = fit_model(timeseries, "auto_arima", target)
-  r_w_diff_var = fit_model(timeseries, "var_target_diff", target)
+  print(mean(colMeans(abs(r_w_var[1:5]))))
   
-  y_max = max(c(colMeans(abs(r_w_var)), colMeans(abs(r_w_arima)), colMeans(abs(r_w_diff_var))))
-  y_min = min(c(colMeans(abs(r_w_var)), colMeans(abs(r_w_arima)), colMeans(abs(r_w_diff_var))))
+  r_w_arima = fit_model(timeseries, "auto_arima", target)
+  print(mean(colMeans(abs(r_w_arima[1:5]))))
+
+  r_w_diff_var = fit_model(timeseries, "var_target_diff", target)
+  print(mean(colMeans(abs(r_w_diff_var[1:5]))))
+
+  r_w_s_and_v = fit_model(timeseries, "s_and_v", target)
+  print(mean(colMeans(abs(r_w_s_and_v[1:5]))))
+  
+  y_max = max(c(colMeans(abs(r_w_var)), colMeans(abs(r_w_arima)), colMeans(abs(r_w_diff_var), colMeans(abs(r_w_s_and_v)))))
+  y_min = min(c(colMeans(abs(r_w_var)), colMeans(abs(r_w_arima)), colMeans(abs(r_w_diff_var), colMeans(abs(r_w_s_and_v)))))
   ylim = c(y_min, y_max)
   
   ylab = "mean abs residual"
@@ -76,17 +80,16 @@ compare_single_series_models <- function(timeseries, target){
   plot(colMeans(abs(r_w_arima)), type="l", col=2, ylim=ylim ,ylab="", xlab="")
   par(new=T)
   plot(colMeans(abs(r_w_diff_var)), type="l", col=3, ylim=ylim ,ylab="", xlab="")
-  legend("topleft", legend=c("VAR", "ARIMA", "DEL_VAR"),
-         col=c(1,2,3), lty=1)
+  par(new=T)
+  plot(colMeans(abs(r_w_s_and_v)), type="l", col=7, ylim=ylim ,ylab="", xlab="")
+  legend("topleft", legend=c("VAR", "ARIMA", "DIFF_VAR", "SPLIT"),
+         col=c(1,2,3,7), lty=1)
   
-  print(mean(colMeans(abs(r_w_var[1:5]))))
-  print(mean(colMeans(abs(r_w_arima[1:5]))))
-  print(mean(colMeans(abs(r_w_diff_var[1:5]))))
 }
 
-# target = "Weight"
-# target_ts <- metrics[target]
-# compare_single_series_models(target_ts, target)
+target = "Weight"
+target_ts <- metrics[target]
+compare_single_series_models(target_ts, target)
 
 compare_multi_metrics<- function(metrics, model_type){
   weight <- metrics["Weight"]
@@ -129,5 +132,5 @@ Animation <- function(){
   saveGIF({residual_data = fit_model(metrics, model_type, animation=T)}, interval=0.12)
 }
 
-Animation()
+#qwAnimation()
 
