@@ -12,7 +12,9 @@ exclude_invalid_lines = function(data){
   data = na.omit(data)
 }
 
-read_mmc_data = function(filename, names=c(), exclude_invalid=T){
+read_mmc_data = function(patient_id, names=c(), exclude_invalid=T){
+  filename = sprintf("../data/Pt#%d CMU.xlsx", patient_id)
+
   skip_line = 3
   loaded_data = read.xls(filename, skip=skip_line)
 

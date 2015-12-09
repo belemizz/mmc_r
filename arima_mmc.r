@@ -5,80 +5,72 @@ source("load_data.r")
 source("plot_data.r")
 source("predict_data.r")
 
-# Set parameters and read data
-filename = "../data/Pt#4 CMU.xlsx"
-
-ma_length=30
-
 # Read data
 used_metrics = c("Weight", "Systolic.BP", "Diastolic.BP", "BP.HR")
 used_names = c("Session.Date", used_metrics)
-mmc_data = read_mmc_data(filename, used_names)
-
+mmc_data = read_mmc_data(9, used_names)
 dates= as.POSIXlt(mmc_data$Session.Date)
 metrics = mmc_data[used_metrics]
 
-#weight =mmc_data$Weight
-#SysBP = mmc_data$Systolic.BP
-#DiasBP = mmc_data$Diastolic.BP
-#BP_HR = mmc_data$BP.HR
+# Visualize Each Time Series
+moving_ave_length=30
+for(item in used_metrics){
+  ts = metrics[[item]]
+  plot_ts_and_ma(ts, dates, moving_ave_length, item)
+  print(item)
+}
 
-# Plot time series and moving average
-#ylabel = "Weight"
-#n_data = length(weight)
-#plot_ts_and_ma(ts, dates, ma_length, ylabel)
-
-#list_ts = list(weight, SysBP, DiasBP, BP_HR)
-#y_labels = c("weight", "SysBP", "DiasBP", "HR")
-#plot_list_ts(list_ts, dates, y_labels)
-
-# Weight ARIMA
-evaluation <- function(metrics, prediction_method="var"){
+# Fit model and return residual of ground truth and prediction by model
+fit_model <- function(metrics, model_type="var", target="Weight", animation=F){
   min_step_for_modeling <- 100
-  prediction_step <- 5 # number of points predicted
+  prediction_step <- 5 # number of points to be predicted
   evaluation_freq <- 1
   n_data = nrow(metrics)
   evaluation_points = min_step_for_modeling + prediction_step + 
     0:((n_data - min_step_for_modeling - prediction_step) / evaluation_freq) * evaluation_freq
   residual_data = data.frame(matrix(rep(NA, prediction_step), nrow=1))[-1,]
+  
   for(evaluation_point in evaluation_points){
     input_step = evaluation_point - prediction_step
-    if(prediction_method=="auto_arima"){
-      ts = metrics[["Weight"]]
-      rs = auto_arima_prediction(ts, dates,
-                                 input_step, prediction_step)
-    }else if(prediction_method=="min_arima"){
-      modeling_step = input_step - validation_step
-      rs = ts_prediction(ts, dates,
-                         modeling_step, validation_step, prediction_step,
-                         max_ar_degree, max_i_degree, max_ma_degree,
-                         arima_optim, visualize_optim_degree = F)
-    }else if(prediction_method=="var"){
-      rs = var_prediction(metrics, dates, input_step, prediction_step)
-    }else if(prediction_method=="diff_var"){
-      rs = diff_var_prediction(metrics, dates, input_step, prediction_step)
-    }else if(prediction_method=="t_diff_var"){
-      rs = t_diff_var_prediction(metrics, dates, input_step, prediction_step)
+    if(model_type=="var"){
+      # VAR(AR) model
+      rs = var_prediction(metrics, dates, input_step, prediction_step, target, plot_prediction = animation)
+    }else if(model_type=="var_target_diff"){
+      # VAR Model, use diffferential sequences for target only
+      rs = diff_var_prediction(metrics, dates, input_step, prediction_step, target, diff_names = c(target), plot_prediction = animation)
+    }else if(model_type=="var_all_diff"){
+      # VAR Model, use diffferential sequences for all sereis
+      rs = diff_var_prediction(metrics, dates, input_step, prediction_step, target, diff_names = names(metrics), plot_prediction = animation)
+    }else if(model_type=="auto_arima"){
+      # ARIMA Model, Single time series only
+      ts = metrics[[target]]
+      rs = auto_arima_prediction(ts, dates, input_step, prediction_step, target, plot_prediction = animation)
+#     }else if(model_type=="min_arima"){
+#       modeling_step = input_step - validation_step
+#       rs = ts_prediction(ts, dates,
+#                          modeling_step, validation_step, prediction_step,
+#                          max_ar_degree, max_i_degree, max_ma_degree,
+#                          arima_optim, visualize_optim_degree = F)
     }else{
-      print("prediction_method must be auto_arima, min_arima or var")
+      print("model_type must be var, var_target_diff, var_all_diff or auto_arima")
     }
-#    print(c(input_step, rs))
     residual_data <- rbind(residual_data, rs)
   }
   return(residual_data)
 }
 
-weight <- metrics["Weight"]
-
-#Single time series comparison
-ARvsARIMAvsDelAR <- function(timeseries){
-  r_w_var = evaluation(timeseries, "var")
-  r_w_arima = evaluation(timeseries, "auto_arima")
-  r_w_diff_var = evaluation(timeseries, "diff_var")
+# Single time series comparison
+compare_single_series_models <- function(timeseries, target){
+  r_w_var = fit_model(timeseries, "var", target)
+  r_w_arima = fit_model(timeseries, "auto_arima", target)
+  r_w_diff_var = fit_model(timeseries, "var_target_diff", target)
+  
+  y_max = max(c(colMeans(abs(r_w_var)), colMeans(abs(r_w_arima)), colMeans(abs(r_w_diff_var))))
+  y_min = min(c(colMeans(abs(r_w_var)), colMeans(abs(r_w_arima)), colMeans(abs(r_w_diff_var))))
+  ylim = c(y_min, y_max)
   
   ylab = "mean abs residual"
   xlab = "prediction steps"
-  ylim = c(2,3)
   plot(colMeans(abs(r_w_var)), type="l", col= 1, ylim=ylim, ylab=ylab, xlab=xlab)
   par(new=T)
   plot(colMeans(abs(r_w_arima)), type="l", col=2, ylim=ylim ,ylab="", xlab="")
@@ -92,47 +84,50 @@ ARvsARIMAvsDelAR <- function(timeseries){
   print(mean(colMeans(abs(r_w_diff_var[1:5]))))
 }
 
-ARvsARIMAvsDelAR(weight)
+# target = "Weight"
+# target_ts <- metrics[target]
+# compare_single_series_models(target_ts, target)
 
-# ARvsVAR <- function(){
-# 
-# }
- 
-DelARvsDelVAR<- function(metrics){
+compare_multi_metrics<- function(metrics, model_type){
   weight <- metrics["Weight"]
   w_hr <- metrics[c("Weight", "BP.HR")]
   w_bp <- metrics[c("Weight", "Systolic.BP", "Diastolic.BP")]
+
+  r_w = fit_model(weight, model_type)
+  r_w_bp = fit_model(w_bp, model_type)
+  r_w_hr = fit_model(w_hr, model_type)
+  r_all = fit_model(metrics, model_type)
   
-  r_w_diff_var = evaluation(weight, "diff_var")
-  r_w_bp_diff_var = evaluation(w_hr, "diff_var")
-  r_w_hr_diff_var = evaluation(w_bp, "diff_var")
-  r_all_diff_var = evaluation(metrics, "diff_var")
+  y_max = max(c(colMeans(abs(r_w)), colMeans(abs(r_w_bp)), colMeans(abs(r_w_hr)), colMeans(abs(r_all))))
+  y_min = min(c(colMeans(abs(r_w)), colMeans(abs(r_w_bp)), colMeans(abs(r_w_hr)), colMeans(abs(r_all))))
+  ylim = c(y_min, y_max)
   
   ylab = "mean abs residual"
   xlab = "prediction steps"
-  ylim = c(2,3)
-  plot(colMeans(abs(r_w_diff_var)), type="l", col=3, ylim=ylim ,ylab=ylab, xlab=xlab)
+  plot(colMeans(abs(r_w)), type="l", col=3, ylim=ylim ,ylab=ylab, xlab=xlab)
   par(new=T)
-  plot(colMeans(abs(r_w_hr_diff_var)), type="l", col=4, ylim=ylim ,ylab="", xlab="")
+  plot(colMeans(abs(r_w_hr)), type="l", col=4, ylim=ylim ,ylab="", xlab="")
   par(new=T)
-  plot(colMeans(abs(r_w_bp_diff_var)), type="l", col=5, ylim=ylim ,ylab="", xlab="")
+  plot(colMeans(abs(r_w_bp)), type="l", col=5, ylim=ylim ,ylab="", xlab="")
   par(new=T)
-  plot(colMeans(abs(r_all_diff_var)), type="l", col=6, ylim=ylim ,ylab="", xlab="")
+  plot(colMeans(abs(r_all)), type="l", col=6, ylim=ylim ,ylab="", xlab="")
   legend("topleft", legend=c("W_ONLY", "W_HR", "W_BP", "ALL"),
          col=c(3, 4, 5, 6), lty=1)
 
-  print(mean(colMeans(abs(r_w_diff_var[1:5]))))
-  print(mean(colMeans(abs(r_w_hr_diff_var[1:5]))))
-  print(mean(colMeans(abs(r_w_bp_diff_var[1:5]))))
-  print(mean(colMeans(abs(r_all_diff_var[1:5]))))
-  
+  print(mean(colMeans(abs(r_w[1:5]))))
+  print(mean(colMeans(abs(r_w_hr[1:5]))))
+  print(mean(colMeans(abs(r_w_bp[1:5]))))
+  print(mean(colMeans(abs(r_all[1:5]))))
 }
 
-DelARvsDelVAR(metrics)
+# compare_multi_metrics(metrics, "var")
+# compare_multi_metrics(metrics, "var_target_diff")
+# compare_multi_metrics(metrics, "var_all_diff")
 
 Animation <- function(){
-  saveGIF({residual_data = evaluation(metrics, "diff_var")}, interval=0.12)
+  model_type = "var_all_diff"
+  saveGIF({residual_data = fit_model(metrics, model_type, animation=T)}, interval=0.12)
 }
 
-#Animation()
+Animation()
 
