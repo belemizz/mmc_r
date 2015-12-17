@@ -1,3 +1,9 @@
+# This is the main script for evaluation of MMC database
+#  - Comparison of single time series models
+#  - Comparison of metrics as a input of AR models
+#  - Make animation of prediction and ground truth
+# Usage: Put data files on ../data as "Pt#0X CMU.xlsx" or edit load_data.r
+
 # Import libraries
 library(animation)
 
@@ -34,7 +40,7 @@ fit_model <- function(metrics, model_type="var", target="Weight", animation=F){
     input_step = evaluation_point - prediction_step
     ts = metrics[[target]]
     if(model_type=="var"){
-      # VAR(AR) model
+      # VAR(AR) model selected by AIC criteria
       rs = var_prediction(metrics, dates, input_step, prediction_step, target, plot_prediction = animation)
     }else if(model_type=="var_target_diff"){
       # VAR Model, use diffferential sequences for target only
@@ -46,6 +52,7 @@ fit_model <- function(metrics, model_type="var", target="Weight", animation=F){
       # ARIMA Model, Single time series only
       rs = auto_arima_prediction(ts, dates, input_step, prediction_step, target, plot_prediction = animation)
     }else if(model_type=="s_and_v"){
+      # VAR(AR) model selected by split and validation
       rs = s_and_v_prediction(ts, dates, input_step, prediction_step, target, plot_prediction = animation)
     }else{
       print("model_type must be var, var_target_diff, var_all_diff or auto_arima")
@@ -123,14 +130,15 @@ compare_multi_metrics<- function(metrics, model_type){
   print(mean(colMeans(abs(r_all[1:5]))))
 }
 
+compare_multi_metrics(metrics, "var_all_diff")
 # compare_multi_metrics(metrics, "var")
 # compare_multi_metrics(metrics, "var_target_diff")
-# compare_multi_metrics(metrics, "var_all_diff")
 
+# Making animation of prediction and 
 Animation <- function(){
   model_type = "var_all_diff"
   saveGIF({residual_data = fit_model(metrics, model_type, animation=T)}, interval=0.12)
 }
 
-#qwAnimation()
+Animation()
 

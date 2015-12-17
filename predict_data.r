@@ -121,9 +121,9 @@ s_and_v_prediction = function(ts, dates, input_step, prediction_step,
 #                          max_ar_degree, max_i_degree, max_ma_degree,
 #                          optim_method, visualize_optim_degree, target="Weight"){
   validation_step = 5
-  max_ar_degree = 5
+  max_ar_degree = 2
   max_i_degree = 1
-  max_ma_degree = 5
+  max_ma_degree = 2
   optim_method = "BFGS"
   visualize_optim_degree = F
   
