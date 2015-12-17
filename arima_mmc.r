@@ -14,7 +14,9 @@ source("predict_data.r")
 # Read data
 used_metrics = c("Weight", "Systolic.BP", "Diastolic.BP", "BP.HR")
 used_names = c("Session.Date", used_metrics)
-mmc_data = read_mmc_data(4, used_names)
+id_number = 4
+
+mmc_data = read_mmc_data(id_number, used_names)
 dates= as.POSIXlt(mmc_data$Session.Date)
 metrics = mmc_data[used_metrics]
 
@@ -141,4 +143,3 @@ Animation <- function(){
 }
 
 Animation()
-
