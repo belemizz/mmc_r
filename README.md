@@ -29,3 +29,4 @@ Put data files on ../data as "Pt#0X CMU.xlsx" or edit load_data.r before use
 $ R
 > source('arima_mmc.r')
 ```
+- Edit id_number in the script to do experiment for other patients
